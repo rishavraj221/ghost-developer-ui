@@ -1,24 +1,44 @@
-import { app, shell, BrowserWindow, ipcMain } from 'electron'
+import { app, shell, BrowserWindow, ipcMain, globalShortcut, dialog } from 'electron'
 import { join } from 'path'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import icon from '../../resources/icon.png?asset'
+import { config } from 'dotenv'
 
+// Load environment variables
+config()
+
+let mainWindow: BrowserWindow | null = null
+
+// Function to create the main browser window
 function createWindow(): void {
-  // Create the browser window.
-  const mainWindow = new BrowserWindow({
-    width: 600,
-    height: 400,
+  mainWindow = new BrowserWindow({
+    width: 1200,
+    height: 800,
     show: false,
     autoHideMenuBar: true,
     ...(process.platform === 'linux' ? { icon } : {}),
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
-      sandbox: false
+      sandbox: false // Disable sandboxing if not required
     }
   })
 
   mainWindow.on('ready-to-show', () => {
-    mainWindow.show()
+    mainWindow?.show()
+
+    // Open DevTools in development mode
+    if (is.dev) {
+      mainWindow?.webContents.openDevTools()
+    }
+
+    // Register a global shortcut to toggle DevTools
+    globalShortcut.register('CommandOrControl+Shift+I', () => {
+      if (mainWindow?.webContents.isDevToolsOpened()) {
+        mainWindow?.webContents.closeDevTools()
+      } else {
+        mainWindow?.webContents.openDevTools()
+      }
+    })
   })
 
   mainWindow.webContents.setWindowOpenHandler((details) => {
@@ -26,49 +46,71 @@ function createWindow(): void {
     return { action: 'deny' }
   })
 
-  // HMR for renderer base on electron-vite cli.
-  // Load the remote URL for development or the local html file for production.
-  if (is.dev && process.env['ELECTRON_RENDERER_URL']) {
-    mainWindow.loadURL(process.env['ELECTRON_RENDERER_URL'])
+  // Load the appropriate content (development or production)
+  const rendererURL = process.env['ELECTRON_RENDERER_URL']
+  if (is.dev && rendererURL) {
+    mainWindow
+      .loadURL(rendererURL)
+      .catch((err) => console.error('Failed to load renderer URL:', err))
   } else {
-    mainWindow.loadFile(join(__dirname, '../renderer/index.html'))
+    mainWindow
+      .loadFile(join(__dirname, '../renderer/index.html'))
+      .catch((err) => console.error('Failed to load index.html:', err))
   }
+
+  // Cleanup when the window is closed
+  mainWindow.on('closed', () => {
+    mainWindow = null
+  })
 }
 
-// This method will be called when Electron has finished
-// initialization and is ready to create browser windows.
-// Some APIs can only be used after this event occurs.
+// Function to set up IPC handlers
+function setupIpcHandlers(): void {
+  // IPC handler for folder selection
+  ipcMain.handle('select-folder', async () => {
+    if (!mainWindow) {
+      console.warn('Main window is not available for folder selection.')
+      return null
+    }
+    const result = await dialog.showOpenDialog(mainWindow, {
+      properties: ['openDirectory']
+    })
+    return result.canceled ? null : result.filePaths[0]
+  })
+
+  // Example: Test IPC communication
+  ipcMain.on('ping', () => console.log('pong received from renderer'))
+}
+
+// App lifecycle management
 app.whenReady().then(() => {
-  // Set app user model id for windows
+  // Set application user model ID (Windows only)
   electronApp.setAppUserModelId('com.electron')
 
-  // Default open or close DevTools by F12 in development
-  // and ignore CommandOrControl + R in production.
-  // see https://github.com/alex8088/electron-toolkit/tree/master/packages/utils
+  // Watch shortcuts in development mode
   app.on('browser-window-created', (_, window) => {
     optimizer.watchWindowShortcuts(window)
   })
 
-  // IPC test
-  ipcMain.on('ping', () => console.log('pong'))
+  createWindow() // Create the main window
+  setupIpcHandlers() // Set up IPC handlers
 
-  createWindow()
-
-  app.on('activate', function () {
-    // On macOS it's common to re-create a window in the app when the
-    // dock icon is clicked and there are no other windows open.
-    if (BrowserWindow.getAllWindows().length === 0) createWindow()
+  // Re-create the window when the app is activated (macOS)
+  app.on('activate', () => {
+    if (BrowserWindow.getAllWindows().length === 0) {
+      createWindow()
+    }
   })
 })
 
-// Quit when all windows are closed, except on macOS. There, it's common
-// for applications and their menu bar to stay active until the user quits
-// explicitly with Cmd + Q.
+// Clean up resources when the app is quitting
+app.on('will-quit', () => {
+  globalShortcut.unregisterAll()
+})
+
+// Quit the app when all windows are closed (except on macOS)
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') {
     app.quit()
   }
 })
-
-// In this file you can include the rest of your app"s specific main process
-// code. You can also put them in separate files and require them here.
