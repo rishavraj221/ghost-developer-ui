@@ -4,7 +4,8 @@ import {
   folderGhostEPFactory,
   queryGhostEPFactory,
   supervisorEPFactory,
-  uiSupervisorEPFactory
+  uiSupervisorEPFactory,
+  projectManagerGhostEPFactory
 } from './endpoints/index.js'
 import { API_BASE_URL, API_PREFIX } from '../../../settings/index.js'
 
@@ -19,7 +20,8 @@ export const baseApi = createApi({
     supervisor: supervisorEPFactory(builder),
     uiSupervisor: uiSupervisorEPFactory(builder),
     apiSupervisor: apiSupervisorEPFactory(builder),
-    folderGhost: folderGhostEPFactory(builder)
+    folderGhost: folderGhostEPFactory(builder),
+    projectManagerGhost: projectManagerGhostEPFactory(builder)
   })
 })
 
@@ -28,5 +30,6 @@ export const {
   useLazySupervisorQuery,
   useLazyUiSupervisorQuery,
   useLazyApiSupervisorQuery,
-  useLazyFolderGhostQuery
+  useLazyFolderGhostQuery,
+  useLazyProjectManagerGhostQuery
 } = baseApi

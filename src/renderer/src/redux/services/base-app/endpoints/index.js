@@ -5,3 +5,5 @@ export {
   apiSupervisor as apiSupervisorEPFactory,
   folderGhost as folderGhostEPFactory
 } from './ghostEPFactory'
+
+export { projectManagerGhost as projectManagerGhostEPFactory } from './agileEPFactory'

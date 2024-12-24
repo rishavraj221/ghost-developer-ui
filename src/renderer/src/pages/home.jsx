@@ -1,8 +1,13 @@
 import React, { useEffect, useState } from 'react'
+import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter'
+import { darcula } from 'react-syntax-highlighter/dist/esm/styles/prism'
+
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 import { Checkbox } from '@/components/ui/checkbox'
+import { ScrollArea } from '@/components/ui/scroll-area'
 import { Label } from '@/components/ui/label'
 import {
   Accordion,
@@ -10,20 +15,38 @@ import {
   AccordionItem,
   AccordionTrigger
 } from '@/components/ui/accordion'
-import {
-  useLazyApiSupervisorQuery,
-  useLazyFolderGhostQuery,
-  useLazyQueryGhostQuery,
-  useLazySupervisorQuery,
-  useLazyUiSupervisorQuery
-} from '../redux/services/base-app'
-import { useDispatch } from 'react-redux'
+import { useLazyProjectManagerGhostQuery } from '../redux/services/base-app'
 import { FaGhost } from 'react-icons/fa'
 import { CircularProgress } from '@mui/material'
-
+import { API_BASE_URL, API_PREFIX } from '../settings'
 // import { ipcRenderer } from 'electron'
 
-const RecursiveTaskList = ({ tasks, toggleTaskCompletion, level = 0 }) => {
+const NOT_STARTED = 'not_started'
+const IN_PROGRESS = 'in_progress'
+const FINISHED = 'finished'
+const STATUS = 'status'
+const CODE = 'code'
+const TEXT = 'text'
+const HELLO_WORLD = 'hello_world'
+
+const defaultTasks = [
+  {
+    id: 'task1',
+    title: 'Frontend Tasks',
+    completed: false,
+    running: false,
+    subtasks: []
+  },
+  {
+    id: 'task2',
+    title: 'Backend Tasks',
+    completed: false,
+    running: false,
+    subtasks: []
+  }
+]
+
+const RecursiveTaskList = ({ tasks, level = 0 }) => {
   return (
     <div className={`pl-${level * 4} space-y-2`}>
       {tasks.map((task) => (
@@ -34,23 +57,14 @@ const RecursiveTaskList = ({ tasks, toggleTaskCompletion, level = 0 }) => {
                 {task.running ? (
                   <CircularProgress size={20} />
                 ) : (
-                  <Checkbox
-                    checked={task.completed}
-                    onCheckedChange={() => toggleTaskCompletion(task.id)}
-                  />
+                  <Checkbox checked={task.completed} />
                 )}
                 <span>{task.title}</span>
               </div>
             </AccordionTrigger>
             <AccordionContent>
               {task?.subtasks?.length > 0 && (
-                <RecursiveTaskList
-                  tasks={task.subtasks}
-                  toggleTaskCompletion={(parentId, subtaskId) =>
-                    toggleTaskCompletion(task.id, subtaskId || parentId)
-                  }
-                  level={level + 1}
-                />
+                <RecursiveTaskList tasks={task.subtasks} level={level + 1} />
               )}
             </AccordionContent>
           </AccordionItem>
@@ -60,39 +74,119 @@ const RecursiveTaskList = ({ tasks, toggleTaskCompletion, level = 0 }) => {
   )
 }
 
-const HomePage = () => {
-  // State for paths and tasks
-  const dispatch = useDispatch()
+const SideBarList = ({ modules, selectedModule, setSelectedModule }) => {
+  return (
+    <ul className="space-y-2">
+      {modules.map((module, i) => (
+        <li key={i}>
+          <Button
+            variant={
+              `${selectedModule.folder_path}/${selectedModule.module_name}` ===
+              `${module.folder_path}/${module.module_name}`
+                ? 'default'
+                : 'outline'
+            }
+            className="w-full justify-start"
+            onClick={() => setSelectedModule(module)}
+          >
+            {`${module.folder_path}/${module.module_name}`}
+          </Button>
+        </li>
+      ))}
+    </ul>
+  )
+}
 
+const ModuleViewer = ({ modules }) => {
+  const [selectedModule, setSelectedModule] = useState(modules[0])
+
+  return (
+    <div className="flex min-h-screen bg-gray-100">
+      {/* Sidebar */}
+      <ScrollArea className="w-1/4 bg-white shadow-lg">
+        <div className="p-4">
+          <h2 className="text-lg font-bold mb-4">Modules</h2>
+
+          <Tabs defaultValue="ui">
+            <TabsList>
+              <TabsTrigger value="ui">Frontend</TabsTrigger>
+              <TabsTrigger value="api">Backend</TabsTrigger>
+            </TabsList>
+
+            <TabsContent value="ui">
+              <SideBarList
+                modules={modules.filter((m) => m.folder_id.includes('ui'))}
+                selectedModule={selectedModule}
+                setSelectedModule={setSelectedModule}
+              />
+            </TabsContent>
+
+            <TabsContent value="api">
+              <SideBarList
+                modules={modules.filter((m) => m.folder_id.includes('api'))}
+                selectedModule={selectedModule}
+                setSelectedModule={setSelectedModule}
+              />
+            </TabsContent>
+          </Tabs>
+        </div>
+      </ScrollArea>
+
+      {/* Details and Code View */}
+      <div className="flex-1 p-4">
+        <Card className="shadow-lg">
+          <CardHeader>
+            <CardTitle className="text-xl font-bold">
+              <div className="flex justify-between items-center">
+                {`${selectedModule.folder_path} - ${selectedModule.module_name}`}
+                <Button onClick={() => navigator.clipboard.writeText(selectedModule.code)}>
+                  Copy Code
+                </Button>
+              </div>
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="p-4">
+              <p>
+                <strong>Folder Path:</strong> {selectedModule.folder_path}
+              </p>
+              <p>
+                <strong>Module Name:</strong> {selectedModule.module_name}
+              </p>
+              <h3 className="mt-4 font-semibold">Acceptance Criteria:</h3>
+              <ul className="list-disc list-inside">
+                {selectedModule.acceptance_criteria.map((criterion, index) => (
+                  <li key={index}>{criterion}</li>
+                ))}
+              </ul>
+            </div>
+
+            <div className="relative p-4" style={{ maxWidth: '90%' }}>
+              <SyntaxHighlighter language="javascript" style={darcula}>
+                {selectedModule.code}
+              </SyntaxHighlighter>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    </div>
+  )
+}
+
+const HomePage = () => {
   const [frontendPath, setFrontendPath] = useState('')
   const [backendPath, setBackendPath] = useState('')
-  const [tasks, setTasks] = useState([
-    {
-      id: 'task1',
-      title: 'Frontend Tasks',
-      completed: false,
-      running: false,
-      subtasks: []
-    },
-    {
-      id: 'task2',
-      title: 'Backend Tasks',
-      completed: false,
-      running: false,
-      subtasks: []
-    }
-  ])
+  const [tasks, setTasks] = useState([])
+  const [epics, setEPICs] = useState([])
+  const [tasksBucket, setTasksBucket] = useState([])
   const [conversation, setConversation] = useState([
     { role: 'assistant', content: 'What do you want to build?' }
   ])
   const [currentInput, setCurrentInput] = useState('')
   const [builderCommand, setBuilderCommand] = useState({})
+  const [codes, setCodes] = useState([])
 
-  const [askGhost, { isFetching: queryGhostThinking }] = useLazyQueryGhostQuery()
-  const [askSupervisor, { isFetching: supervisorThinking }] = useLazySupervisorQuery()
-  const [askUISupervisor, { isFetching: uiSupervisorThinking }] = useLazyUiSupervisorQuery()
-  const [askAPISupervisor, { isFetching: apiSupervisorThinking }] = useLazyApiSupervisorQuery()
-  const [askFolderGhost, { isFetching: folderGhostThinking }] = useLazyFolderGhostQuery()
+  const [askGhost, { isFetching: queryGhostThinking }] = useLazyProjectManagerGhostQuery()
 
   // Function to select directory (mock Electron dialog)
   const selectDirectory = async (type) => {
@@ -106,79 +200,34 @@ const HomePage = () => {
     }
   }
 
-  const toggleTaskCompletion = (taskId, subtaskId = null) => {
+  const toggleTaskCompletion = ({
+    tasks,
+    taskId,
+    isCompleted = false,
+    isRunning = false,
+    setTasks
+  }) => {
     const updateTasks = (tasks) => {
-      return tasks.map((task) => {
-        // If this task matches the taskId
+      for (let i = 0; i < tasks.length; i++) {
+        const task = tasks[i]
+
         if (task.id === taskId) {
-          // If no subtaskId is specified, toggle the entire task
-          if (!subtaskId) {
-            const newCompletedState = !task.completed
-            const updateAllSubtasks = (subtasks, completed) => {
-              return subtasks.map((subtask) => ({
-                ...subtask,
-                completed,
-                ...(subtask.subtasks
-                  ? { subtasks: updateAllSubtasks(subtask.subtasks, completed) }
-                  : {})
-              }))
-            }
+          tasks[i].completed = isCompleted
+          tasks[i].running = isRunning
 
-            return {
-              ...task,
-              completed: newCompletedState,
-              subtasks: task.subtasks ? updateAllSubtasks(task.subtasks, newCompletedState) : []
-            }
-          }
-
-          // If subtaskId is specified, find and toggle the subtask
-          const updateSubtasks = (subtasks) => {
-            return subtasks.map((subtask) => {
-              if (subtask.id === subtaskId) {
-                // Toggle this subtask
-                const newCompletedState = !subtask.completed
-                return {
-                  ...subtask,
-                  completed: newCompletedState,
-                  subtasks: subtask.subtasks ? updateSubtasks(subtask.subtasks) : []
-                }
-              }
-
-              // Recursively update deeper levels
-              return {
-                ...subtask,
-                subtasks: subtask.subtasks ? updateSubtasks(subtask.subtasks) : []
-              }
-            })
-          }
-
-          const updatedSubtasks = updateSubtasks(task.subtasks || [])
-          const allSubtasksCompleted = updatedSubtasks.every((st) => st.completed)
-
-          return {
-            ...task,
-            subtasks: updatedSubtasks,
-            completed: allSubtasksCompleted
-          }
+          return tasks
         }
 
-        // If task doesn't match, return it unchanged
-        return {
-          ...task,
-          subtasks: task.subtasks ? updateTasks(task.subtasks) : []
+        if (task?.subtasks?.length > 0) {
+          task.subtasks = updateTasks(task.subtasks)
         }
-      })
+      }
+
+      return tasks
     }
 
-    const updatedTasks = updateTasks(tasks)
-
-    // Update the state with the new task structure
-    setTasks(updatedTasks)
-  }
-
-  // Generate project based on query (mock function)
-  const generateProject = async () => {
-    //
+    const tempTasks = updateTasks([...tasks])
+    setTasks(tempTasks)
   }
 
   // Mock API call to fetch follow-up questions
@@ -203,157 +252,95 @@ const HomePage = () => {
     const apiResponse = await fetchFollowUpQuestion(updatedConversation)
 
     if (apiResponse?.is_query_clear) {
+      const epics = apiResponse.epics
+      setEPICs(epics)
+
       setBuilderCommand({
-        to_build: apiResponse.to_build,
-        reply_to_user: apiResponse.reply_to_user
+        is_query_clear: true,
+        epics: epics,
+        reply_to_user: apiResponse?.reply_to_user
       })
 
-      const supervisorResponse = await askSupervisor({
-        query: apiResponse.to_build,
-        ui_dir_path: frontendPath,
-        api_dir_path: backendPath
-      }).unwrap()
+      const tempTasks = []
+      const tempTasksBucket = []
+      for (let i = 0; i < epics.length; i++) {
+        const subtasks = []
 
-      const tempTasks = [...tasks]
+        for (let j = 0; j < epics[i].stories.length; j++) {
+          const subsubtasks = []
 
-      tempTasks[0].subtasks = supervisorResponse?.ui_supervisor_prompts?.map((query, i) => {
-        return { id: i + 1, completed: false, running: false, title: query }
-      })
-      tempTasks[1].subtasks = supervisorResponse?.api_supervisor_prompts?.map((query, i) => {
-        return { id: i + 1, completed: false, running: false, title: query }
-      })
+          for (let k = 0; k < epics[i].stories[j].tasks.length; k++) {
+            tempTasksBucket.push({
+              id: epics[i].stories[j].tasks[k].id,
+              name: epics[i].stories[j].tasks[k].task,
+              completed: false,
+              running: false,
+              progress: 0
+            })
 
-      setTasks(tempTasks)
+            subsubtasks.push({
+              id: epics[i].stories[j].tasks[k].id,
+              title: epics[i].stories[j].tasks[k].task,
+              completed: false,
+              running: false
+            })
+          }
 
-      const ui_tasks = supervisorResponse?.ui_supervisor_prompts
-      tempTasks[0].running = true
-      setTasks(tempTasks)
-      for (let i = 0; i < ui_tasks?.length; i++) {
-        const { agents } = await askUISupervisor({
-          query: ui_tasks[i],
-          ui_dir_path: frontendPath
-        }).unwrap()
-
-        tempTasks[0].subtasks[i].subtasks = agents.map((ag, ind) => {
-          return {
-            id: ind + 1,
+          subtasks.push({
+            id: epics[i].stories[j].id,
+            title: epics[i].stories[j].title,
             completed: false,
             running: false,
-            title: `${ag.folder_name} - (${ag.tasks.length} tasks) `,
-            subtasks: ag.tasks.map((agt, sind) => {
-              return {
-                id: sind + 1,
-                completed: false,
-                running: false,
-                title: agt
-              }
-            })
-          }
-        })
-
-        tempTasks[0].subtasks[i].running = true
-        setTasks(tempTasks)
-
-        for (let j = 0; j < agents.length; j++) {
-          const { folder_agent_id, folder_name, tasks, new_dependencies } = agents[j]
-
-          tempTasks[0].subtasks[i].subtasks[j].running = true
-          setTasks(tempTasks)
-
-          for (let k = 0; k < tasks.length; k++) {
-            tempTasks[0].subtasks[i].subtasks[j].subtasks[k].running = true
-            setTasks(tempTasks)
-
-            await askFolderGhost({
-              folder_agent_id,
-              agent_prompt: tasks[k],
-              ui_dir_path: frontendPath,
-              api_dir_path: backendPath
-            })
-
-            tempTasks[0].subtasks[i].subtasks[j].subtasks[k].completed = true
-            tempTasks[0].subtasks[i].subtasks[j].subtasks[k].running = false
-            setTasks(tempTasks)
-          }
-
-          tempTasks[0].subtasks[i].subtasks[j].completed = true
-          tempTasks[0].subtasks[i].subtasks[j].running = false
-          setTasks(tempTasks)
+            subtasks: subsubtasks
+          })
         }
 
-        tempTasks[0].subtasks[i].completed = true
-        tempTasks[0].subtasks[i].running = false
-        setTasks(tempTasks)
-      }
-
-      tempTasks[0].running = false
-      tempTasks[0].completed = true
-      setTasks(tempTasks)
-
-      const api_tasks = supervisorResponse?.api_supervisor_prompts
-      tempTasks[1].running = true
-      setTasks(tempTasks)
-      for (let i = 0; i < api_tasks?.length; i++) {
-        const { agents } = await askAPISupervisor({
-          query: api_tasks[i],
-          api_dir_path: backendPath
-        }).unwrap()
-
-        tempTasks[1].subtasks[i].subtasks = agents.map((ag, ind) => {
-          return {
-            id: ind + 1,
-            completed: false,
-            running: false,
-            title: `${ag.folder_name} - (${ag.tasks.length} tasks) `,
-            subtasks: ag.tasks.map((agt, sind) => {
-              return {
-                id: sind + 1,
-                completed: false,
-                running: false,
-                title: agt
-              }
-            })
-          }
+        tempTasks.push({
+          id: epics[i]?.id,
+          title: epics[i]?.title,
+          completed: false,
+          running: false,
+          subtasks
         })
-
-        tempTasks[1].subtasks[i].running = true
-        setTasks(tempTasks)
-
-        for (let j = 0; j < agents.length; j++) {
-          const { folder_agent_id, folder_name, tasks, new_dependencies } = agents[j]
-
-          tempTasks[1].subtasks[i].subtasks[j].running = true
-          setTasks(tempTasks)
-
-          for (let k = 0; k < tasks.length; k++) {
-            tempTasks[1].subtasks[i].subtasks[j].subtasks[k].running = true
-            setTasks(tempTasks)
-
-            await askFolderGhost({
-              folder_agent_id,
-              agent_prompt: tasks[k],
-              ui_dir_path: frontendPath,
-              api_dir_path: backendPath
-            }).unwrap()
-
-            tempTasks[1].subtasks[i].subtasks[j].subtasks[k].completed = true
-            tempTasks[1].subtasks[i].subtasks[j].subtasks[k].running = false
-            setTasks(tempTasks)
-          }
-
-          tempTasks[1].subtasks[i].subtasks[j].completed = true
-          tempTasks[1].subtasks[i].subtasks[j].running = false
-          setTasks(tempTasks)
-        }
-
-        tempTasks[1].subtasks[i].completed = true
-        tempTasks[1].subtasks[i].running = false
-        setTasks(tempTasks)
       }
 
-      tempTasks[1].running = false
-      tempTasks[1].completed = true
       setTasks(tempTasks)
+      setTasksBucket(tempTasksBucket)
+
+      const eventSource = new EventSource(
+        `${API_BASE_URL}/${API_PREFIX}/app-service-v2/?job-id=${apiResponse.uid}&ui-dir-path=${frontendPath}&api-dir-path=${backendPath}`
+      )
+
+      const tempCodes = []
+
+      eventSource.onmessage = (event) => {
+        const data = JSON.parse(event.data)
+
+        console.log('ssr data check : ', data)
+
+        if (data?.type === STATUS) {
+          for (const [taskId, value] of Object.entries(data.content)) {
+            toggleTaskCompletion({
+              tasks: tempTasks,
+              taskId,
+              isCompleted: value === FINISHED,
+              isRunning: value === IN_PROGRESS,
+              setTasks
+            })
+
+            const tempIndex = tempTasksBucket.map((tt) => tt.id).indexOf(taskId)
+            if (tempIndex > -1) {
+              tempTasksBucket[tempIndex].running = value === IN_PROGRESS
+              tempTasksBucket[tempIndex].completed = value === FINISHED
+            }
+          }
+        } else if (data?.type === CODE) {
+          tempCodes.push(data.content)
+          setCodes(tempCodes)
+        } else if (data?.type === FINISHED) {
+          eventSource.close()
+        }
+      }
     } else {
       // Add system response to the conversation
       setConversation((prev) => [
@@ -401,7 +388,7 @@ const HomePage = () => {
 
       <Card>
         <CardHeader>
-          <CardTitle>Assistant</CardTitle>
+          <CardTitle>Ghost Builder</CardTitle>
         </CardHeader>
         <CardContent>
           {/* Conversation Display */}
@@ -435,7 +422,7 @@ const HomePage = () => {
           </div>
 
           {/* User Input */}
-          {builderCommand?.to_build ? (
+          {builderCommand?.is_query_clear ? (
             <div
               className={`flex `}
               style={{
@@ -472,14 +459,54 @@ const HomePage = () => {
         </CardContent>
       </Card>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Project Tasks</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <RecursiveTaskList tasks={tasks} toggleTaskCompletion={toggleTaskCompletion} />
-        </CardContent>
-      </Card>
+      <div
+        className=" grid grid-cols-2 gap-6"
+        style={{ display: 'flex', justifyContent: 'space-between' }}
+      >
+        <div style={{ width: '50%' }}>
+          <Card>
+            <CardHeader>
+              <CardTitle>EPIC and Stories</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <RecursiveTaskList tasks={tasks} />
+            </CardContent>
+          </Card>
+        </div>
+
+        {/* Tasks Bucket Card */}
+        <div style={{ width: '50%' }}>
+          <Card>
+            <CardHeader>
+              <div className="flex justify-between items-center">
+                <CardTitle>Tasks Bucket</CardTitle>
+                <span className="text-sm text-gray-500">{tasksBucket.length} tasks</span>
+              </div>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-4">
+                {tasksBucket.map((task, index) => (
+                  <div key={index} className="flex justify-between items-center border rounded p-2">
+                    <div className="flex justify-between items-center gap-2">
+                      <div className="flex items-center space-x-2">
+                        {task.running ? (
+                          <CircularProgress size={20} />
+                        ) : (
+                          <Checkbox checked={task.completed} />
+                        )}
+                        <span>{task.title}</span>
+                      </div>
+                      <div className="text-gray-800">{task.name}</div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      </div>
+
+      {codes.length > 0 && <ModuleViewer modules={codes} />}
     </div>
   )
 }
