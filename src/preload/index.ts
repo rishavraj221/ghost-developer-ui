@@ -7,6 +7,23 @@ const api = {
     // Expose a method to select a folder
     return ipcRenderer.invoke('select-folder')
   },
+  createFile: async (filePath: string, fileContent: string): Promise<string | null> => {
+    // Create a new file at the given path
+    return ipcRenderer.invoke('create-file', filePath, fileContent)
+  },
+  createDir: async (dirPath: string): Promise<string | null> => {
+    // Create a new directory at the given path
+    return ipcRenderer.invoke('create-dir', dirPath)
+  },
+  readDirStructure: async (dirPath: string, asArray: boolean): Promise<string | null> => {
+    return ipcRenderer.invoke('read-dir-structure', dirPath, asArray)
+  },
+  pathJoin: async (params: [string]): Promise<string | null> => {
+    return ipcRenderer.invoke('path-join', params)
+  },
+  readFile: async (path: string): Promise<string | null> => {
+    return ipcRenderer.invoke('read-file', path)
+  },
   ping: () => {
     // Example of sending a ping message
     ipcRenderer.send('ping')
@@ -14,9 +31,11 @@ const api = {
 }
 
 const envs = {
-  API_PREFIX: process.env.REACT_APP_API_PREFIX,
-  API_URL: process.env.REACT_APP_API_BASE_URL,
-  SECRET_KEY: process.env.ELECTRON_APP_SECRET_KEY
+  API_PREFIX: process.env.REACT_APP_API_PREFIX || 'api/v1',
+  API_URL:
+    process.env.REACT_APP_API_BASE_URL ||
+    'https://oom4v5j5eb.execute-api.ap-south-1.amazonaws.com/dev/',
+  SECRET_KEY: process.env.ELECTRON_APP_SECRET_KEY || 'secret_key'
 }
 
 // Use `contextBridge` APIs to expose Electron APIs to

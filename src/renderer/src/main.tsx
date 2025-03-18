@@ -1,29 +1,21 @@
 import React from 'react'
 import ReactDOM from 'react-dom/client'
-import { ThemeProvider as MUIThemeProvider, createTheme } from '@mui/material/styles'
-import CssBaseline from '@mui/material/CssBaseline'
 import { Provider } from 'react-redux'
+import '@radix-ui/themes/styles.css'
 
 import './global.css'
+import { Theme } from '@radix-ui/themes'
+// import { Flex, Text, Button } from '@radix-ui/themes'
 import App from './App'
-import { ThemeProvider } from './components/theme-provider'
 import store from './redux'
-
-const darkTheme = createTheme({
-  palette: {
-    mode: 'dark'
-  }
-})
 
 ReactDOM.createRoot(document.getElementById('root') as HTMLElement).render(
   <React.StrictMode>
     <Provider store={store}>
-      <ThemeProvider defaultTheme="dark" storageKey="vite-ui-theme">
-        <MUIThemeProvider theme={darkTheme}>
-          <CssBaseline />
-          <App />
-        </MUIThemeProvider>
-      </ThemeProvider>
+      <Theme>
+        <App />
+        {/* <ThemePanel /> */}
+      </Theme>
     </Provider>
   </React.StrictMode>
 )

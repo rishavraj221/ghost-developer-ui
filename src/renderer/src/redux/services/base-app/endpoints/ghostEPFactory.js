@@ -59,3 +59,16 @@ export const folderGhost = (builder) =>
       }
     })
   })
+
+export const ghostBuilderEPFactory = (builder) =>
+  builder.query({
+    query: ({ conversation, codebase_info, code_info }) => ({
+      url: 'app-service-v3',
+      method: 'POST',
+      body: {
+        conversation,
+        codebase_info,
+        code_info
+      }
+    })
+  })
